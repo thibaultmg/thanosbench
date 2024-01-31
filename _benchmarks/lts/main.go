@@ -3,12 +3,12 @@ package main
 import (
 	"regexp"
 
+	"github.com/alecthomas/kingpin/v2"
 	"github.com/bwplotka/mimic"
 	"github.com/thanos-io/thanosbench/benchmarks"
 	"github.com/thanos-io/thanosbench/configs/abstractions/dockerimage"
 	"github.com/thanos-io/thanosbench/configs/abstractions/secret"
 	k8s "github.com/thanos-io/thanosbench/configs/kubernetes"
-	"gopkg.in/alecthomas/kingpin.v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )

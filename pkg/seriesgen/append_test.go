@@ -10,11 +10,13 @@ import (
 	"time"
 
 	"github.com/prometheus/prometheus/model/exemplar"
+	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/metadata"
 	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/storage"
-	"github.com/thanos-io/thanos/pkg/testutil"
+
+	"github.com/stretchr/testify/assert"
 )
 
 type testSet struct {
@@ -84,14 +86,18 @@ func (a *testAppendable) Appender(_ context.Context) storage.Appender {
 	return a
 }
 
+func (a *testAppendable) AppendHistogram(_ storage.SeriesRef, _ labels.Labels, _ int64, _ *histogram.Histogram, _ *histogram.FloatHistogram) (storage.SeriesRef, error) {
+	return 0, nil
+}
+
 func TestAppend(t *testing.T) {
 	s := &testSet{
 		count: 2,
 	}
 
 	a := &testAppendable{samples: map[uint64][]sample{}}
-	testutil.Ok(t, Append(context.Background(), 2*runtime.GOMAXPROCS(0), a, s))
-	testutil.Equals(t, map[uint64][]sample{
+	assert.NoError(t, Append(context.Background(), 2*runtime.GOMAXPROCS(0), a, s))
+	assert.Equal(t, map[uint64][]sample{
 		0x6577cd4df75e4415: {
 			{T: 10000, V: 140.13863149001767},
 			{T: 20000, V: 106.88960028354377},

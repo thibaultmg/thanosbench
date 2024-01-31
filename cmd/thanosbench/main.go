@@ -1,20 +1,20 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"runtime"
 	"syscall"
 
-	"github.com/go-kit/log"
-	"github.com/go-kit/log/level"
+	"github.com/alecthomas/kingpin/v2"
+	// "github.com/go-kit/log"
+	// "github.com/go-kit/log/level"
 	"github.com/oklog/run"
-	"github.com/pkg/errors"
 	"github.com/prometheus/common/version"
-	"go.uber.org/automaxprocs/maxprocs"
-	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 const (
@@ -22,7 +22,7 @@ const (
 	logFormatJson   = "json"
 )
 
-type setupFunc func(*run.Group, log.Logger) error
+type setupFunc func(*run.Group, *slog.Logger) error
 
 func main() {
 	if os.Getenv("DEBUG") != "" {
@@ -43,60 +43,52 @@ func main() {
 		Default(logFormatLogfmt).Enum(logFormatLogfmt, logFormatJson)
 
 	cmds := map[string]setupFunc{}
-	registerWalgen(cmds, app)
+	// registerWalgen(cmds, app)
 	registerBlock(cmds, app)
-	registerStress(cmds, app)
+	// registerStress(cmds, app)
 
 	cmd, err := app.Parse(os.Args[1:])
 	if err != nil {
-		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "Error parsing commandline arguments"))
+		fmt.Fprintln(os.Stderr, fmt.Errorf("error parsing commandline arguments: %w", err))
 		app.Usage(os.Args[1:])
 		os.Exit(2)
 	}
 
-	var logger log.Logger
+	var logger *slog.Logger
+	// var logger log.Logger
 	{
-		var lvl level.Option
+		var lvl = new(slog.LevelVar)
 		switch *logLevel {
 		case "error":
-			lvl = level.AllowError()
+			lvl.Set(slog.LevelError)
 		case "warn":
-			lvl = level.AllowWarn()
+			lvl.Set(slog.LevelWarn)
 		case "info":
-			lvl = level.AllowInfo()
+			lvl.Set(slog.LevelInfo)
 		case "debug":
-			lvl = level.AllowDebug()
+			lvl.Set(slog.LevelDebug)
 		default:
 			panic("unexpected log level")
 		}
-		logger = log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
+		logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: lvl}))
 		if *logFormat == logFormatJson {
-			logger = log.NewJSONLogger(log.NewSyncWriter(os.Stderr))
+			logger = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: lvl}))
 		}
-		logger = level.NewFilter(logger, lvl)
 
 		if *debugName != "" {
-			logger = log.With(logger, "name", *debugName)
+			logger = logger.With("name", *debugName)
+			// logger = log.With(logger, "name", *debugName)
 		}
 
-		logger = log.With(logger, "ts", log.DefaultTimestampUTC, "caller", log.DefaultCaller)
-	}
+		// logger = logger.With("ts", slog.DefaultTimestampUTC, "caller", slog.DefaultCaller)
 
-	loggerAdapter := func(template string, args ...interface{}) {
-		level.Debug(logger).Log("msg", fmt.Sprintf(template, args))
-	}
-
-	// Running in container with limits but with empty/wrong value of GOMAXPROCS env var could lead to throttling by cpu
-	// maxprocs will automate adjustment by using cgroups info about cpu limit if it set as value for runtime.GOMAXPROCS.
-	undo, err := maxprocs.Set(maxprocs.Logger(loggerAdapter))
-	defer undo()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "failed to set GOMAXPROCS: %v", err))
+		// logger = log.With(logger, "ts", log.DefaultTimestampUTC, "caller", log.DefaultCaller)
 	}
 
 	var g run.Group
 	if err := cmds[cmd](&g, logger); err != nil {
-		level.Error(logger).Log("err", fmt.Sprintf("%v", errors.Wrapf(err, "%s command failed", cmd)))
+		logger.Error(fmt.Sprintf("%s command failed", cmd), "err", err)
+		// level.Error(logger).Log("err", fmt.Sprintf("%v", fmt.Errorf("%s command failed; %w", cmd, err)))
 		os.Exit(1)
 	}
 
@@ -111,22 +103,22 @@ func main() {
 	}
 
 	if err := g.Run(); err != nil {
-		level.Error(logger).Log("msg", "running command failed", "err", err)
+		logger.Error("running command failed", "err", err)
 		os.Exit(1)
 	}
 	if cmd != "block plan" {
-		level.Info(logger).Log("msg", "exiting", "cmd", cmd)
+		logger.Info("exiting", "cmd", cmd)
 	}
 }
 
-func interrupt(logger log.Logger, cancel <-chan struct{}) error {
+func interrupt(logger *slog.Logger, cancel <-chan struct{}) error {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 	select {
 	case s := <-c:
-		level.Info(logger).Log("msg", "caught signal. Exiting.", "signal", s)
+		logger.Info("caught signal. Exiting.", "signal", s)
 		return nil
 	case <-cancel:
-		return errors.New("canceled")
+		return errors.New("cancelled")
 	}
 }

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestCounterGen(t *testing.T) {
@@ -25,13 +25,13 @@ func TestCounterGen(t *testing.T) {
 		samples++
 		if init {
 			ts, val := g.At()
-			testutil.Assert(t, lastV <= val, "")
-			testutil.Assert(t, lastT <= ts, "")
+			assert.True(t, lastV <= val)
+			assert.True(t, lastT <= ts)
 			init = true
 		}
 		lastT, lastV = g.At()
 	}
-	testutil.Equals(t, int64((24*time.Hour)/(15*time.Second)), samples)
+	assert.Equal(t, int64((24*time.Hour)/(15*time.Second)), samples)
 }
 
 func TestGaugeGen(t *testing.T) {
@@ -51,11 +51,11 @@ func TestGaugeGen(t *testing.T) {
 		samples++
 		if init {
 			ts, val := g.At()
-			testutil.Assert(t, lastV <= val, "")
-			testutil.Assert(t, lastT <= ts, "")
+			assert.True(t, lastV <= val)
+			assert.True(t, lastT <= ts)
 			init = true
 		}
 		lastT, lastV = g.At()
 	}
-	testutil.Equals(t, int64((24*time.Hour)/(15*time.Second)), samples)
+	assert.Equal(t, int64((24*time.Hour)/(15*time.Second)), samples)
 }

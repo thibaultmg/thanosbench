@@ -1,11 +1,11 @@
 package main
 
 import (
+	"github.com/alecthomas/kingpin/v2"
 	"github.com/bwplotka/mimic"
 	"github.com/thanos-io/thanosbench/benchmarks"
 	"github.com/thanos-io/thanosbench/configs/abstractions/dockerimage"
 	k8s "github.com/thanos-io/thanosbench/configs/kubernetes"
-	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 func main() {

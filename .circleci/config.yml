@@ -1,12 +1,12 @@
 version: 2.1
 
 orbs:
-  go: circleci/go@1.7.1
+  go: circleci/go@1.21.`
 
 executors:
   golang:
     docker:
-      - image: cimg/go:1.18-node
+      - image: cimg/go:1.21-node
 
 jobs:
   test:

@@ -3,11 +3,11 @@ package main
 import (
 	"os"
 
+	"github.com/alecthomas/kingpin/v2"
 	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/go-kit/log"
 	"github.com/oklog/run"
 	"github.com/thanos-io/thanosbench/pkg/walgen"
-	"gopkg.in/alecthomas/kingpin.v2"
 	"gopkg.in/yaml.v2"
 )
 

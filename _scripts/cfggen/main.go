@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 
+	kingpin "github.com/alecthomas/kingpin/v2"
 	"github.com/fatih/structtag"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -14,7 +15,6 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/thanos-io/thanosbench/pkg/blockgen"
 	"github.com/thanos-io/thanosbench/pkg/walgen"
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
 	yaml "gopkg.in/yaml.v2"
 )
 

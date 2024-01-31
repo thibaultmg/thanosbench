@@ -2,8 +2,8 @@ package seriesgen
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/storage"
 	"golang.org/x/sync/errgroup"
 )
@@ -47,18 +47,18 @@ func Append(ctx context.Context, goroutines int, appendable storage.Appendable, 
 					ref, err = app.Append(ref, s.Labels(), t, v)
 					if err != nil {
 						if rerr := app.Rollback(); rerr != nil {
-							err = errors.Wrapf(err, "rollback failed: %v", rerr)
+							err = fmt.Errorf("append: %w, rollback: %v", err, rerr)
 						}
 
-						return errors.Wrap(err, "add sample")
+						return fmt.Errorf("append: %w", err)
 					}
 				}
 
 				if err := iter.Err(); err != nil {
 					if rerr := app.Rollback(); rerr != nil {
-						err = errors.Wrapf(err, "rollback failed: %v", rerr)
+						err = fmt.Errorf("iter: %w, rollback: %v", err, rerr)
 					}
-					return errors.Wrap(err, "iter")
+					return fmt.Errorf("iter: %w", err)
 				}
 			}
 		})
@@ -69,7 +69,7 @@ func Append(ctx context.Context, goroutines int, appendable storage.Appendable, 
 		// TODO(bwplotka): Add some progress bar.
 		case workBuffer <- series.At():
 		case <-gctx.Done():
-			return errors.Wrapf(g.Wait(), "err: %s", gctx.Err())
+			return fmt.Errorf("context done: %w", gctx.Err())
 		}
 
 	}

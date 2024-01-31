@@ -2,15 +2,14 @@ package blockgen
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 	"math"
 	"runtime"
 	"time"
 
 	"github.com/oklog/ulid"
 
-	"github.com/go-kit/log"
-	"github.com/go-kit/log/level"
-	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
@@ -22,7 +21,7 @@ var _ Writer = &BlockWriter{}
 // BlockWriter is implementation of Writer interface. Not designed to be thread-safe.
 type BlockWriter struct {
 	// logger is given to us as arg.
-	logger log.Logger
+	logger *slog.Logger
 
 	// dir is output directory, given to us as arg.
 	dir string
@@ -38,21 +37,21 @@ type BlockWriter struct {
 // The returned writer accumulates all series in memory until `Flush` is called.
 // The repeated pattern of writes and flushes is allowed e.g.:
 //
-//	for n < 1000 {
-//		// write a lot of stuff into memory
-//		w.Write()
-//		w.Write()
+//		for n < 1000 {
+//			// write a lot of stuff into memory
+//			w.Write()
+//			w.Write()
 //
-//		// write block to disk
-//		w.Flush()
-//  }
+//			// write block to disk
+//			w.Flush()
+//	 }
 //
 // The above loop will produce 1000 blocks on disk.
 //
 // Note that the writer will not check if the target directory exists or
 // contains anything at all. It is the caller's responsibility to
 // ensure that the resulting blocks do not overlap etc.
-func NewTSDBBlockWriter(logger log.Logger, dir string) (*BlockWriter, error) {
+func NewTSDBBlockWriter(logger *slog.Logger, dir string) (*BlockWriter, error) {
 	res := &BlockWriter{
 		logger: logger,
 		dir:    dir,
@@ -75,11 +74,11 @@ func (w *BlockWriter) Appender(ctx context.Context) storage.Appender {
 func (w *BlockWriter) Flush() (ulid.ULID, error) {
 	id, err := w.writeHeadToDisk()
 	if err != nil {
-		return ulid.ULID{}, errors.Wrap(err, "writeHeadToDisk")
+		return ulid.ULID{}, fmt.Errorf("write head to disk: %w", err)
 	}
 
 	if err := w.head.Close(); err != nil {
-		return ulid.ULID{}, errors.Wrap(err, "close head")
+		return ulid.ULID{}, fmt.Errorf("close head: %w", err)
 	}
 
 	return id, nil
@@ -99,9 +98,9 @@ func (w *BlockWriter) initHeadAndAppender() error {
 	// Since we don't have info about block size here, set it to large number.
 	opts := tsdb.DefaultHeadOptions()
 	opts.ChunkRange = durToMilis(9999 * time.Hour)
-	h, err := tsdb.NewHead(nil, logger, nil, opts, nil)
+	h, err := tsdb.NewHead(nil, loggerFunc(logger.Info), nil, nil, opts, nil)
 	if err != nil {
-		return errors.Wrap(err, "tsdb.NewHead")
+		return fmt.Errorf("create head: %w", err)
 	}
 
 	w.head = h
@@ -112,33 +111,28 @@ func (w *BlockWriter) initHeadAndAppender() error {
 // writeHeadToDisk commits the appender and writes the head to disk.
 func (w *BlockWriter) writeHeadToDisk() (ulid.ULID, error) {
 	if err := w.Appender(context.TODO()).Commit(); err != nil {
-		return ulid.ULID{}, errors.Wrap(err, "appender.Commit")
+		return ulid.ULID{}, fmt.Errorf("commit appender: %w", err)
 	}
 
 	seriesCount := w.head.NumSeries()
 	if seriesCount == 0 {
-		return ulid.ULID{}, errors.New("no series appended; aborting.")
+		return ulid.ULID{}, fmt.Errorf("no series to flush")
 	}
 
 	mint := w.head.MinTime()
 	maxt := w.head.MaxTime()
-	level.Info(w.logger).Log(
-		"msg", "flushing",
-		"series_count", seriesCount,
-		"mint", timestamp.Time(mint),
-		"maxt", timestamp.Time(maxt),
-	)
+	w.logger.Info("flushing", "series_count", seriesCount, "mint", timestamp.Time(mint), "maxt", timestamp.Time(maxt))
 	// Flush head to disk as a block.
 	compactor, err := tsdb.NewLeveledCompactor(
 		context.Background(),
 		nil,
-		w.logger,
+		loggerFunc(w.logger.Info),
 		[]int64{durToMilis(2 * time.Hour)}, // Does not matter, used only for planning.
 		chunkenc.NewPool(),
 		nil,
 	)
 	if err != nil {
-		return ulid.ULID{}, errors.Wrap(err, "create leveled compactor")
+		return ulid.ULID{}, fmt.Errorf("create compactor: %w", err)
 	}
 
 	return compactor.Write(w.dir, w.head, mint, maxt+1, nil)

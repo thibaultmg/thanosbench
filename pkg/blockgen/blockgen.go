@@ -3,14 +3,12 @@ package blockgen
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
+	"log/slog"
 	"math/rand"
 	"path"
 	"time"
 
-	"github.com/cespare/xxhash/v2"
-	"github.com/pkg/errors"
-
-	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
@@ -50,7 +48,7 @@ func (g GenType) Create(random *rand.Rand, mint, maxt int64, opts seriesgen.Char
 	case Gauge:
 		return seriesgen.NewGaugeGen(random, mint, maxt, opts), nil
 	default:
-		return nil, errors.Errorf("unknown type: %s", string(g))
+		return nil, fmt.Errorf("unknown generator type %v", g)
 	}
 }
 
@@ -72,7 +70,7 @@ func durToMilis(t time.Duration) int64 {
 }
 
 // Generate creates a block from given spec using given go routines in a given directory.
-func Generate(ctx context.Context, logger log.Logger, goroutines int, dir string, block BlockSpec) (ulid.ULID, error) {
+func Generate(ctx context.Context, logger *slog.Logger, goroutines int, dir string, block BlockSpec) (ulid.ULID, error) {
 	w, err := NewTSDBBlockWriter(logger, dir)
 	if err != nil {
 		return ulid.ULID{}, err
@@ -84,21 +82,21 @@ func Generate(ctx context.Context, logger log.Logger, goroutines int, dir string
 	}
 	set := &blockSeriesSet{config: block, extLset: labels.FromMap(extLset)}
 	if err := seriesgen.Append(ctx, goroutines, w, set); err != nil {
-		return ulid.ULID{}, errors.Wrap(err, "append")
+		return ulid.ULID{}, fmt.Errorf("append: %w", err)
 	}
 	id, err := w.Flush()
 	if err != nil {
-		return ulid.ULID{}, errors.Wrap(err, "flush")
+		return ulid.ULID{}, fmt.Errorf("flush: %w", err)
 	}
 
 	bdir := path.Join(dir, id.String())
 	meta, err := metadata.ReadFromDir(bdir)
 	if err != nil {
-		return ulid.ULID{}, errors.Wrap(err, "meta read")
+		return ulid.ULID{}, fmt.Errorf("meta read: %w", err)
 	}
 	meta.Thanos = block.Thanos
-	if err := meta.WriteToDir(logger, bdir); err != nil {
-		return ulid.ULID{}, errors.Wrap(err, "meta write")
+	if err := meta.WriteToDir(loggerFunc(logger.Info), bdir); err != nil {
+		return ulid.ULID{}, fmt.Errorf("meta write: %w", err)
 	}
 	return id, nil
 }
@@ -144,8 +142,10 @@ func (s *blockSeriesSet) Next() bool {
 	}
 
 	// Stable random per series name.
+	h := fnv.New64a()
+	h.Write(b)
 	iter, err := series.Type.Create(
-		rand.New(rand.NewSource(int64(xxhash.Sum64(b)))),
+		rand.New(rand.NewSource(int64(h.Sum64()))),
 		series.MinTime,
 		series.MaxTime,
 		series.Characteristics,
@@ -161,3 +161,10 @@ func (s *blockSeriesSet) Next() bool {
 func (s *blockSeriesSet) At() seriesgen.Series { return s.curr }
 
 func (s *blockSeriesSet) Err() error { return s.err }
+
+type loggerFunc func(string, ...interface{})
+
+func (l loggerFunc) Log(keyvals ...interface{}) error {
+	l("", keyvals...)
+	return nil
+}

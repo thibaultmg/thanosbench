@@ -2,6 +2,7 @@ package walgen
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"os"
 	"runtime"
@@ -11,7 +12,6 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
@@ -87,19 +87,19 @@ func GenerateTSDBWAL(logger log.Logger, dir string, config Config) error {
 				case "gauge":
 					set.s = append(set.s, seriesgen.NewSeriesGen(lset, seriesgen.NewGaugeGen(random, minTime, maxTime, in.Characteristics)))
 				default:
-					return errors.Errorf("failed to parse series, unknown metric type: %s", in.Type)
+					return fmt.Errorf("unknown series type %q", in.Type)
 				}
 			}
 		}
 	}
 
 	if err := seriesgen.Append(context.Background(), 2*runtime.GOMAXPROCS(0), db, set); err != nil {
-		return errors.Wrap(err, "commit")
+		return fmt.Errorf("append: %w", err)
 	}
 
 	// Don't wait for compact, it will be compacted by Prometheus anyway.
 	if err := db.Close(); err != nil {
-		return errors.Wrap(err, "close")
+		return fmt.Errorf("close: %w", err)
 	}
 
 	level.Info(logger).Log("msg", "generated artificial metrics", "series", len(set.s))
