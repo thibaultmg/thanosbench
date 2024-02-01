@@ -54,10 +54,11 @@ func main() {
 		os.Exit(2)
 	}
 
-	var logger *slog.Logger
+	// var logger *slog.Logger
 	// var logger log.Logger
+	lvl := new(slog.LevelVar)
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: lvl}))
 	{
-		var lvl = new(slog.LevelVar)
 		switch *logLevel {
 		case "error":
 			lvl.Set(slog.LevelError)
@@ -70,7 +71,6 @@ func main() {
 		default:
 			panic("unexpected log level")
 		}
-		logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: lvl}))
 		if *logFormat == logFormatJson {
 			logger = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: lvl}))
 		}
